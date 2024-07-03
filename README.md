@@ -32,7 +32,7 @@ Please unzip this file and set its path as the argument ```E_shapenet4096```.
 
 ## Training
 ```
-python E_train.py --E_shapenet4096 PATH_TO_SHAPENET4096 --E_ckpts_folder PATH_TO_SAVE --D_datatype DATA_TYPE
+python E_train.py --E_shapenet4096 /home/efedele/Datasets/ShapeNetNormal4096/ --E_ckpts_folder /home/efedele/Programming/thesis/SuperquadricsAbstractionViaSeg/checkpoints/
 ```
 
 ## Inference

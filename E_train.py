@@ -145,14 +145,6 @@ def validate(hypara, val_dataloader, Network, loss_func, loss_weight, save_path,
         if epoch >= 0:
             model_name = utils_pt.create_name(iter, loss_dict)
             torch.save(Network.state_dict(), save_path +'/'+ model_name + '.pth')
-            vertices, faces = utils_pt.generate_cube_mesh_batch(save_dict['verts_forward'], save_dict['cube_face'], hypara['L']['L_batch_size'])
-            utils_pt.visualize_segmentation(save_points, color, save_dict['assign_matrix'], save_path + '/log/', 0, None)
-            utils_pt.visualize_cubes(vertices, faces, color, save_path + '/log/', 0, '', None)
-            utils_pt.visualize_cubes_masked(vertices, faces, color, save_dict['assign_matrix'], save_path + '/log/', 0, '', None)
-            vertices_pred, faces_pred = utils_pt.generate_cube_mesh_batch(save_dict['verts_predict'], save_dict['cube_face'], hypara['L']['L_batch_size'])
-            utils_pt.visualize_cubes(vertices_pred, faces_pred, color, save_path + '/log/', 0, 'pred', None)
-            utils_pt.visualize_cubes_masked(vertices_pred, faces_pred, color, save_dict['assign_matrix'], save_path + '/log/', 0, 'pred', None)
-            utils_pt.visualize_cubes_masked_pred(vertices_pred, faces_pred, color, save_dict['exist'], save_path + '/log/', 0, None)
     
     return best_eval_loss
 

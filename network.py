@@ -144,6 +144,9 @@ class Para_pred(nn.Module):
 
         self.conv_trans = nn.Conv1d(128, 3, kernel_size=1)
         nn.init.zeros_(self.conv_trans.bias)
+        
+        self.conv_shape = nn.Conv1d(128, 2, kernel_size=1)
+        nn.init.zeros_(self.conv_shape.bias)
 
         self.conv_ext =   nn.Sequential(nn.Conv1d(128, 32, kernel_size=1, bias=True),
                                         nn.LeakyReLU(negative_slope=0.2, inplace = True),
@@ -159,10 +162,13 @@ class Para_pred(nn.Module):
 
         trans = self.conv_trans(x_cuboid).transpose(2, 1)    # (batch_size, num_cuboid, 3)
         trans = torch.tanh(trans)                            # (batch_size, num_cuboid, 3)
+        
+        shapes = self.conv_shape(x_cuboid).transpose(2, 1)    # (batch_size, num_cuboid, 1)
+        shapes = 0.1 + 1.8*torch.sigmoid(shapes)               # (batch_size, num_cuboid, 1)
 
         exist = self.conv_ext(x_cuboid).transpose(2, 1)
 
-        return scale, rotate, trans, exist
+        return scale, rotate, trans, shapes, exist
 
 ##########################################################################################################################
 class Attention_module(nn.Module):
@@ -199,33 +205,33 @@ class Network_Whole(nn.Module):
         self.Para_pred = Para_pred()
         self.Attention_module = Attention_module(attention_dim = self.attention_dim)
 
-    def sample(self, num_samples):
-        x_cuboid = self.Feature_extract.sample(num_samples)
-        scale, rotate, trans, exist = self.Para_pred(x_cuboid)
+    # def sample(self, num_samples):
+    #     x_cuboid = self.Feature_extract.sample(num_samples)
+    #     scale, rotate, trans, exist = self.Para_pred(x_cuboid)
 
-        verts_forward = self.cube_vert.unsqueeze(0).unsqueeze(0).repeat(num_samples,self.num_cuboid,1,1) * scale.unsqueeze(2).repeat(1,1,8,1)
-        verts_forward = torch.einsum('abcd,abde->abce',rotate, verts_forward.permute(0,1,3,2)).permute(0,1,3,2)
-        verts_predict = verts_forward + trans.unsqueeze(2).repeat(1,1,8,1)
+    #     verts_forward = self.cube_vert.unsqueeze(0).unsqueeze(0).repeat(num_samples,self.num_cuboid,1,1) * scale.unsqueeze(2).repeat(1,1,8,1)
+    #     verts_forward = torch.einsum('abcd,abde->abce',rotate, verts_forward.permute(0,1,3,2)).permute(0,1,3,2)
+    #     verts_predict = verts_forward + trans.unsqueeze(2).repeat(1,1,8,1)
 
-        return {'scale':scale,
-                'rotate':rotate,
-                'trans':trans,
-                'exist':exist,
-                'verts_predict':verts_predict}
+    #     return {'scale':scale,
+    #             'rotate':rotate,
+    #             'trans':trans,
+    #             'exist':exist,
+    #             'verts_predict':verts_predict}
 
-    def interpolation(self,z1,z2,num_samples):
-        x_cuboid = self.Feature_extract.interpolation(z1 ,z2 ,num_samples)
-        scale, rotate, trans, exist = self.Para_pred(x_cuboid)
+    # def interpolation(self,z1,z2,num_samples):
+    #     x_cuboid = self.Feature_extract.interpolation(z1 ,z2 ,num_samples)
+    #     scale, rotate, trans, exist = self.Para_pred(x_cuboid)
 
-        verts_forward = self.cube_vert.unsqueeze(0).unsqueeze(0).repeat(num_samples,self.num_cuboid,1,1) * scale.unsqueeze(2).repeat(1,1,8,1)
-        verts_forward = torch.einsum('abcd,abde->abce',rotate, verts_forward.permute(0,1,3,2)).permute(0,1,3,2)
-        verts_predict = verts_forward + trans.unsqueeze(2).repeat(1,1,8,1)
+    #     verts_forward = self.cube_vert.unsqueeze(0).unsqueeze(0).repeat(num_samples,self.num_cuboid,1,1) * scale.unsqueeze(2).repeat(1,1,8,1)
+    #     verts_forward = torch.einsum('abcd,abde->abce',rotate, verts_forward.permute(0,1,3,2)).permute(0,1,3,2)
+    #     verts_predict = verts_forward + trans.unsqueeze(2).repeat(1,1,8,1)
 
-        return {'scale':scale,
-                'rotate':rotate,
-                'trans':trans,
-                'exist':exist,
-                'verts_predict':verts_predict}
+    #     return {'scale':scale,
+    #             'rotate':rotate,
+    #             'trans':trans,
+    #             'exist':exist,
+    #             'verts_predict':verts_predict}
 
     def forward(self, pc):
         batch_size = pc.shape[0]
@@ -233,28 +239,19 @@ class Network_Whole(nn.Module):
         # rotate B * N * 3 * 3
         # scale B * N * 3
         x_per, x_cuboid, z, mu, log_var = self.Feature_extract(pc)
-        scale, rotate, trans, exist = self.Para_pred(x_cuboid)
+        scale, rotate, trans, shapes, exist = self.Para_pred(x_cuboid)
         assign_matrix = self.Attention_module(x_per, x_cuboid)
 
         pc_assign = pc.unsqueeze(2).repeat(1,1,self.num_cuboid,1) * assign_matrix.unsqueeze(-1).repeat(1,1,1,3)
         # directly compute the cuboid center from segmentation branch
         pc_assign_mean = pc_assign.sum(1) / (assign_matrix.sum(1) + 1).unsqueeze(-1).repeat(1,1,3)
 
-        verts_forward = self.cube_vert.unsqueeze(0).unsqueeze(0).repeat(batch_size,self.num_cuboid,1,1) * scale.unsqueeze(2).repeat(1,1,8,1)
-        verts_forward = torch.einsum('abcd,abde->abce',rotate, verts_forward.permute(0,1,3,2)).permute(0,1,3,2)
-        verts_forward = verts_forward + pc_assign_mean.unsqueeze(2).repeat(1,1,8,1)
-
-        # predict the cuboid center
-        verts_predict = verts_forward - pc_assign_mean.unsqueeze(2).repeat(1,1,8,1) + trans.unsqueeze(2).repeat(1,1,8,1)
-
         return {'scale':scale,
                 'rotate':rotate,
                 'trans':trans,
+                'shapes':shapes,
                 'pc_assign_mean':pc_assign_mean,
                 'assign_matrix':assign_matrix,
-                'verts_forward':verts_forward,
-                'verts_predict':verts_predict,
-                'cube_face':self.cube_face,
                 'x_cuboid':x_cuboid,
                 'exist':exist,
                 'z':z,

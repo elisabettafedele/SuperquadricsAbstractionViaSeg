@@ -16,15 +16,14 @@ class loss_whole(nn.Module):
         
         self.cube_planes = torch.FloatTensor([[-1,-1,-1],[1,1,1]]).cuda().unsqueeze(0).unsqueeze(0).detach()
 
-    def compute_REC(self, idx_normals_sim_max, assign_matrix,\
-                    scale, pc_inver, pc_sample_inver, planes_scaled, mask_project, mask_plane,\
+    
+    # self.compute_REC(out_dict_1['assign_matrix'],out_dict_1['scale'],\
+    #                                 points, pc_sample_inver,\
+    #                                 batch_size, num_points, num_cuboids)
+    def compute_REC(self, assign_matrix,\
+                    scale, points_sq, pc_sample_inver,\
                     batch_size, num_points, num_cuboids):
-        planes_scaled = planes_scaled.unsqueeze(1).repeat(1,num_points,1,3,1).reshape(batch_size,num_points,num_cuboids*6,3)
-        scale = scale.unsqueeze(1).repeat(1,num_points,1,6).reshape(batch_size,num_points,num_cuboids*6,3)
-        pc_project = pc_sample_inver.permute(0,2,1,3).repeat(1,1,1,6).reshape(batch_size,num_points,num_cuboids*6,3) * mask_project + planes_scaled * mask_plane
-        pc_project = torch.max(torch.min(pc_project, scale), -scale).view(batch_size, num_points, num_cuboids, 6, 3)  # [B * num_points * (N*6) * 3]
-        pc_project = torch.gather(pc_project, dim=3, index = idx_normals_sim_max.unsqueeze(-1).repeat(1,1,1,1,3)).squeeze(3).permute(0,2,1,3)
-        diff = ((pc_project - pc_inver) ** 2).sum(-1).permute(0,2,1)
+        diff = ((pc_sample_inver - points_sq) ** 2).sum(-1).permute(0,2,1)
         diff = torch.mean(torch.mean(torch.sum(diff * assign_matrix, -1), 1))
 
         return diff
@@ -55,6 +54,10 @@ class loss_whole(nn.Module):
         return diff
 
     def forward(self, pc, normals, out_dict_1, out_dict_2, hypara):
+        def f(o, m):
+            return torch.sign(torch.sin(o)) * torch.abs(torch.sin(o))**m
+        def g(o, m):
+            return torch.sign(torch.cos(o)) * torch.abs(torch.cos(o))**m
         batch_size = out_dict_1['scale'].shape[0]
         num_cuboids = out_dict_1['scale'].shape[1]
         num_points = pc.shape[1]
@@ -65,28 +68,33 @@ class loss_whole(nn.Module):
         pc_sample_inver = pc_sample.unsqueeze(1).repeat(1,num_cuboids,1,1) - out_dict_1['pc_assign_mean'].unsqueeze(2).repeat(1,1,num_points,1)
         pc_sample_inver = torch.einsum('abcd,abde->abce', out_dict_1['rotate'].permute(0,1,3,2), pc_sample_inver.permute(0,1,3,2)).permute(0,1,3,2) #B * N * num_points * 3
 
-        planes_scaled = self.cube_planes.repeat(batch_size,num_cuboids,1,1) * out_dict_1['scale'].unsqueeze(2).repeat(1,1,2,1)
-
         pc_inver = pc.unsqueeze(1).repeat(1,num_cuboids,1,1) - out_dict_1['pc_assign_mean'].unsqueeze(2).repeat(1,1,num_points,1)
         pc_inver = torch.einsum('abcd,abde->abce', out_dict_1['rotate'].permute(0,1,3,2), pc_inver.permute(0,1,3,2)).permute(0,1,3,2) #B * N * num_points * 3
 
+        normals /= normals.norm(dim=2, keepdim=True) # sanity check: normalize normals if they are not normalized
         normals_inver = normals.unsqueeze(1).repeat(1,num_cuboids,1,1)
         normals_inver = torch.einsum('abcd,abde->abce', out_dict_1['rotate'].permute(0,1,3,2), normals_inver.permute(0,1,3,2)).permute(0,1,3,2) #B * N * num_points * 3
 
-        mask_project = self.mask_project.repeat(batch_size,num_points,num_cuboids,1)
-        mask_plane = self.mask_plane.repeat(batch_size,num_points,num_cuboids,1)
-        cube_normal = self.cube_normal.unsqueeze(2).repeat(batch_size,num_points,num_cuboids,1,1)
-
-        cos = nn.CosineSimilarity(dim=4, eps=1e-4)
-        idx_normals_sim_max = torch.max(cos(normals_inver.permute(0,2,1,3).unsqueeze(3).repeat(1,1,1,6,1),cube_normal),dim=-1,keepdim=True)[1]
-
+        # 1. Find for each SQ the point on its surface in the direction of the normal
+        theta = torch.atan2(normals_inver[:,:, :, 1], normals_inver[:,:, :, 0])
+        phi = torch.atan2(normals_inver[:,:, :, 2], torch.sqrt(normals_inver[:,:, :, 0] ** 2 + normals_inver[:,:, :, 1] ** 2))
+        
+        # 2. Compute corresponding points on the sq surface
+        shapes = out_dict_1['shapes']
+        scales = out_dict_1['scale']
+        x = scales [:,:,0,None] * g(phi, shapes[:,:,0,None]) * g(theta, shapes[:,:,1,None])
+        y = scales [:,:,1,None] * g(phi, shapes[:,:,0,None]) * f(theta, shapes[:,:,1,None])
+        z = scales [:,:,2,None] * f(phi, shapes[:,:,0,None])
+        # torch.sign(torch.cos(theta)) * torch.pow(torch.cos(phi), shapes[:,:,0,None]) * torch.pow(torch.cos(theta), shapes[:,:,1,None])
+        points = torch.stack([x, y, z], dim=-1)
+        
         loss_ins = 0
         loss_dict = {}
 
         # Loss REC
         if hypara['W']['W_REC'] != 0:
-            REC = self.compute_REC(idx_normals_sim_max, out_dict_1['assign_matrix'],out_dict_1['scale'],\
-                                    pc_inver, pc_sample_inver, planes_scaled, mask_project, mask_plane,\
+            REC = self.compute_REC(out_dict_1['assign_matrix'],out_dict_1['scale'],\
+                                    points, pc_sample_inver,\
                                     batch_size, num_points, num_cuboids)
             loss_ins = loss_ins + REC * hypara['W']['W_REC'] 
             loss_dict['REC'] = REC.data.detach().item()

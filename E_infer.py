@@ -75,16 +75,7 @@ def infer(args, cur_dataloader, Network, hypara, train_val_test, batch_size, col
             points, normals, _, _, names = data
             points, normals = points.cuda(), normals.cuda()
             outdict = Network(pc = points)
-
-            vertices, faces = utils_pt.generate_cube_mesh_batch(outdict['verts_forward'], outdict['cube_face'], batch_size)
-            utils_pt.visualize_segmentation(points, color, outdict['assign_matrix'], save_path, _, names)
-            utils_pt.visualize_cubes(vertices, faces, color, save_path, _, '', names)
-            utils_pt.visualize_cubes_masked(vertices, faces, color, outdict['assign_matrix'], save_path, _, '', names)
-            # not needed, these points use as mean the predicted mean, which in practice is not optimized
-            # vertices_pred, faces_pred = utils_pt.generate_cube_mesh_batch(outdict['verts_predict'], outdict['cube_face'], batch_size)
-            # utils_pt.visualize_cubes(vertices_pred, faces_pred, color, save_path, _, 'pred', names)
-            # utils_pt.visualize_cubes_masked(vertices_pred, faces_pred, color, outdict['assign_matrix'], save_path, _, 'pred', names)
-            # utils_pt.visualize_cubes_masked_pred(vertices_pred, faces_pred, color, outdict['exist'], save_path, _, names)
+            utils_pt.save_cubes_json(outdict['scale'], outdict['rotate'],  outdict['pc_assign_mean'], outdict['shapes'], outdict['exist'], save_path, names)
             print(j)
 
 

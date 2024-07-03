@@ -8,6 +8,8 @@ from plyfile import (PlyData, PlyElement)
 import matplotlib.cm as cm
 import matplotlib.pyplot as plt
 from mpl_toolkits.mplot3d import Axes3D
+from scipy.spatial.transform import Rotation as R
+import json  
 
 def quat2mat(quat):
     B = quat.shape[0]
@@ -209,4 +211,29 @@ def visualize_segmentation(pc, color, assign_matrix, save_path, bias, names):
             filename = save_path + str(bias + k) + '_segment.ply'
         color_segment = color[np.argmax(assign_matrix[k,:,:],1),:]
         export_pc(pc[k,:,:], color_segment, filename)
+        
+def save_cubes_json(scale, rotate, trans, shapes, exists, save_path, names):
+    batch_size = scale.shape[0]
+    num_el = scale.shape[1]
+    func_Sigmoid = nn.Sigmoid()
+    exists = func_Sigmoid(exists.squeeze(-1)).detach().cpu().numpy()
+    
+    for el in range(batch_size):
+        components = []
+        for k in range(num_el):
+            if exists[el,k] > 0.5:
+                component = {}
+                component['scale'] = scale[el,k,:].detach().cpu().numpy().tolist()
+                rot3x3 = rotate[el,k,:].detach().cpu().numpy()
+                r = R.from_matrix(rot3x3)
+                
+                # convert from 3 x3 into euler angles
+                component['rotation'] = rot3x3.tolist()
+                component['position'] = trans[el,k,:].detach().cpu().numpy().tolist()
+                component['epsilon1'] = shapes[0]
+                component['epsilon2'] = shapes[1]
+                components.append(component)
+        res = {}
+        res['components'] = components
+        json.dump(res, open(save_path + names[el] + '.json', 'w'))
 
