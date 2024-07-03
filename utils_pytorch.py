@@ -230,8 +230,8 @@ def save_cubes_json(scale, rotate, trans, shapes, exists, save_path, names):
                 # convert from 3 x3 into euler angles
                 component['rotation'] = rot3x3.tolist()
                 component['position'] = trans[el,k,:].detach().cpu().numpy().tolist()
-                component['epsilon1'] = shapes[0]
-                component['epsilon2'] = shapes[1]
+                component['epsilon1'] = shapes[el,k,0].detach().cpu().numpy().tolist()
+                component['epsilon2'] = shapes[el,k,1].detach().cpu().numpy().tolist()
                 components.append(component)
         res = {}
         res['components'] = components
