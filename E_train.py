@@ -179,6 +179,7 @@ if __name__ == "__main__":
 
     # Weight(W) hyper-parameters of losses
     parser.add_argument ('--W_REC', default = 1.00, type = float, help = 'REC loss weight')
+    parser.add_argument ('--W_ALG', default = 0.1, type = float, help = 'ALG loss weight')
     parser.add_argument ('--W_std', default = 0.05, type = float, help = 'std of normal sampling')
     parser.add_argument ('--W_SPS', default = 0.10, type = float, help = 'SPS loss weight')
     parser.add_argument ('--W_EXT', default = 0.01, type = float, help = 'EXT loss weight')

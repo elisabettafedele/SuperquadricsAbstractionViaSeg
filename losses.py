@@ -49,12 +49,18 @@ class loss_whole(nn.Module):
         
 
         return diff
-
+    
+    def compute_ALG(self, assign_matrix, scale, shapes, pc_inver):
+        f = torch.pow(torch.pow((pc_inver[:,:,:,0]/scale[:,:,0,None])**2, 1/shapes[:,:,1,None]) + torch.pow((pc_inver[:,:,:,1]/scale[:,:,1,None])**2, 1/shapes[:,:,1,None]), shapes[:,:,1,None]/shapes[:,:,0,None]) + torch.pow((pc_inver[:,:,:,2]/scale[:,:,2,None])**2, 1/shapes[:,:,0,None])
+        d = torch.norm(pc_inver, p = 2, dim = -1) * torch.abs(1 - torch.pow(torch.abs(f), -shapes[:,:,1,None]/2))
+        d = d.permute(0,2,1)
+        diff = torch.mean(torch.mean(torch.sum(d * assign_matrix, -1), 1))
+        return diff
+        
     def compute_SPS(self, assign_matrix):
         num_points = assign_matrix.shape[1]
         norm_05 = (assign_matrix.sum(1)/num_points + 0.01).sqrt().mean(1).pow(2)
         norm_05 = torch.mean(norm_05)
-
         return norm_05
 
     def compute_EXT(self, assign_matrix, exist,
@@ -118,7 +124,11 @@ class loss_whole(nn.Module):
                                     batch_size, num_points, num_cuboids)
             loss_ins = loss_ins + REC * hypara['W']['W_REC'] 
             loss_dict['REC'] = REC.data.detach().item()
-
+        
+        if hypara['W']['W_ALG']  != 0: # (self, assign_matrix, scale, shapes, pc_inver)
+            ALG = self.compute_ALG(out_dict_1['assign_matrix'], out_dict_1['scale'], out_dict_1['shapes'], pc_inver)
+            loss_ins = loss_ins + ALG * hypara['W']['W_ALG'] 
+            loss_dict['ALG'] = ALG.data.detach().item()
         # Loss SPS
         if hypara['W']['W_SPS']  != 0:
             SPS = self.compute_SPS(out_dict_1['assign_matrix'])

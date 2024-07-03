@@ -38,7 +38,11 @@ python E_train.py --E_shapenet4096 /home/efedele/Datasets/ShapeNetNormal4096/ --
 ## Inference
 ```
 python E_infer.py --E_shapenet4096 PATH_TO_SHAPENET4096 --E_ckpt_path DIRECTORY_TO_CHECKPOINT --checkpoint CHECKPOINT_NAME
-```
+
+python E_infer.py --E_shapenet4096 /home/efedele/Datasets/ShapeNetNormal4096/ --E_ckpt_path /home/efedele/Programming/thesis/SuperquadricsAbstractionViaSeg/checkpoints_4/EXP_1/chair-L_0.0006_0.9_32_1000-N_0_20_1024_512_64_16-W_1.0_0.05_0.1_0.01_6e-06_0.0/ --checkpoint iter4608_REC0.0032_SPS0.0572_EXT0.0782_KLD45.7696_ALL0.0100_eval0.0089_mu-0.0013_var0.8680.pth
+
+```python E_train.py --E_shapenet4096 /home/efedele/Datasets/ShapeNetNormal4096/ --E_ckpts_folder /home/efedele/Programming/thesis/SuperquadricsAbstractionViaSeg/checkpoints_ALG/
+
 
 ## Cite
 Please cite our work if you find it useful:

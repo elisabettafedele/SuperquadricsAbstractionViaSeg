@@ -164,7 +164,7 @@ class Para_pred(nn.Module):
         trans = torch.tanh(trans)                            # (batch_size, num_cuboid, 3)
         
         shapes = self.conv_shape(x_cuboid).transpose(2, 1)    # (batch_size, num_cuboid, 1)
-        shapes = 0.1 + 1.8*torch.sigmoid(shapes)               # (batch_size, num_cuboid, 1)
+        shapes = 0.5 + 0.4*torch.sigmoid(shapes)               # (batch_size, num_cuboid, 1)
 
         exist = self.conv_ext(x_cuboid).transpose(2, 1)
 
